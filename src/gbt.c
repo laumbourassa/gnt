@@ -275,9 +275,9 @@ static gbt_status_t _gbt_delete_recursive(gbt_byte_t* byte, gbt_nibble_t** nibbl
     gbt_nibble_t* nibble = nibbles[high_nibble];
     gbt_node_t* node = nibble->nodes[low_nibble];
     
-    uint8_t child_byte;
+    uint8_t child_byte = 0;
     gbt_status_t status = _gbt_delete_recursive(&child_byte, node->nibbles, key, index + 1, accessor, deallocator);
-    
+
     if (STOP == status)
     {
         return STOP;
@@ -312,8 +312,8 @@ static gbt_status_t _gbt_delete_recursive(gbt_byte_t* byte, gbt_nibble_t** nibbl
         return STOP;
     }
     
-    free(nibble->nodes[GBT_LOW_NIBBLE(child_byte)]);
-    nibble->nodes[GBT_LOW_NIBBLE(child_byte)] = NULL;
+    free(nibble->nodes[low_nibble]);
+    nibble->nodes[low_nibble] = NULL;
     nibble->children--;
     
     if (nibble->children)
