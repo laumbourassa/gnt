@@ -228,7 +228,7 @@ static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_i
     do
     {
         digits++;
-        temp /= 10;
+        temp >>= 8; // division by 256
     } while (temp > 0);
 
     if (index >= digits)
@@ -238,10 +238,10 @@ static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_i
 
     for (uint8_t i = 0; i < digits - index - 1; i++)
     {
-        key /= 10;
+        key >>= 8; // division by 256
     }
 
-    *byte = key % 10;
+    *byte = key & 255; // modulo 256
     return 0;
 }
 
