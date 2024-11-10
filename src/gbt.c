@@ -222,9 +222,26 @@ gbt_status_t gbt_accessor_string(gbt_byte_t* byte, gbt_key_t key, gbt_index_t in
 
 static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_index_t index)
 {
-    if (index >= sizeof(gbt_key_t)) return -1;
-    
-    *byte = GBT_SELECT_KEY_BYTE(key, index);
+    uint8_t digits = 0;
+    gbt_key_t temp = key;
+
+    do
+    {
+        digits++;
+        temp /= 10;
+    } while (temp > 0);
+
+    if (index >= digits)
+    {
+        return -1;
+    }
+
+    for (uint8_t i = 0; i < digits - index - 1; i++)
+    {
+        key /= 10;
+    }
+
+    *byte = key % 10;
     return 0;
 }
 
