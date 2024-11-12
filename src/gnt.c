@@ -1,9 +1,9 @@
 /*
- * gbt.c - Generic Bitwise Trie implementation
+ * gnt.c - Generic Nibble Trie implementation
  * 
  * Copyright (c) 2024 Laurent Mailloux-Bourassa
  * 
- * This file is part of the Generic Bitwise Trie (GBT) library.
+ * This file is part of the Generic Nibble Trie (GNT) library.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,36 +27,36 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "gbt.h"
+#include "gnt.h"
 
-#define GBT_HIGH_NIBBLE(byte)           (byte >> 4)
-#define GBT_LOW_NIBBLE(byte)            (byte & 0x0F)
-#define GBT_SELECT_KEY_BYTE(key, index) (key >> (8 * index))
+#define GNT_HIGH_NIBBLE(byte)           (byte >> 4)
+#define GNT_LOW_NIBBLE(byte)            (byte & 0x0F)
+#define GNT_SELECT_KEY_BYTE(key, index) (key >> (8 * index))
 
-typedef struct gbt_node gbt_node_t;
+typedef struct gnt_node gnt_node_t;
 
-typedef struct gbt_nibble gbt_nibble_t;
-typedef struct gbt_nibble // Represents the first 4 bits of a byte
+typedef struct gnt_nibble gnt_nibble_t;
+typedef struct gnt_nibble // Represents the first 4 bits of a byte
 {
     uint8_t children;
-    gbt_node_t* nodes[16];
-} gbt_nibble_t;
+    gnt_node_t* nodes[16];
+} gnt_nibble_t;
 
-typedef struct gbt_node // Represents the last 4 bits of a byte
+typedef struct gnt_node // Represents the last 4 bits of a byte
 {
     bool occupied;
     uint8_t children;
-    gbt_data_t data;
-    gbt_nibble_t* nibbles[16];
-} gbt_node_t;
+    gnt_data_t data;
+    gnt_nibble_t* nibbles[16];
+} gnt_node_t;
 
-typedef struct gbt_trie
+typedef struct gnt_trie
 {
     uint8_t children;
-    gbt_nibble_t* nibbles[16];
-    gbt_accessor_t accessor;
-    gbt_deallocator_t deallocator;
-} gbt_trie_t;
+    gnt_nibble_t* nibbles[16];
+    gnt_accessor_t accessor;
+    gnt_deallocator_t deallocator;
+} gnt_trie_t;
 
 enum
 {
@@ -65,28 +65,28 @@ enum
     STOP
 };
 
-static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_index_t index);
-static void _gbt_destroy_recursive_nibbles(gbt_nibble_t** nibbles, uint8_t children, gbt_deallocator_t deallocator);
-static void _gbt_destroy_recursive_nodes(gbt_node_t** nodes, uint8_t children, gbt_deallocator_t deallocator);
-static gbt_status_t _gbt_delete_recursive(gbt_byte_t* byte, gbt_nibble_t** nibbles, gbt_key_t key, gbt_index_t index, gbt_accessor_t accessor, gbt_deallocator_t deallocator);
+static gnt_status_t _gnt_accessor_default(gnt_byte_t* byte, gnt_key_t key, gnt_index_t index);
+static void _gnt_destroy_recursive_nibbles(gnt_nibble_t** nibbles, uint8_t children, gnt_deallocator_t deallocator);
+static void _gnt_destroy_recursive_nodes(gnt_node_t** nodes, uint8_t children, gnt_deallocator_t deallocator);
+static gnt_status_t _gnt_delete_recursive(gnt_byte_t* byte, gnt_nibble_t** nibbles, gnt_key_t key, gnt_index_t index, gnt_accessor_t accessor, gnt_deallocator_t deallocator);
 
-gbt_trie_t* gbt_create(gbt_cfg_t* cfg)
+gnt_trie_t* gnt_create(gnt_cfg_t* cfg)
 {
-    gbt_accessor_t accessor;
-    gbt_deallocator_t deallocator;
+    gnt_accessor_t accessor;
+    gnt_deallocator_t deallocator;
     
     if (cfg)
     {
-        accessor = cfg->accessor ? cfg->accessor : _gbt_accessor_default;
+        accessor = cfg->accessor ? cfg->accessor : _gnt_accessor_default;
         deallocator = cfg->deallocator;
     }
     else
     {
-        accessor = _gbt_accessor_default;
+        accessor = _gnt_accessor_default;
         deallocator = NULL;
     }
     
-    gbt_trie_t* trie = calloc(1, sizeof(gbt_trie_t));
+    gnt_trie_t* trie = calloc(1, sizeof(gnt_trie_t));
     
     if (trie)
     {
@@ -97,35 +97,35 @@ gbt_trie_t* gbt_create(gbt_cfg_t* cfg)
     return trie;
 }
 
-gbt_status_t gbt_destroy(gbt_trie_t* trie)
+gnt_status_t gnt_destroy(gnt_trie_t* trie)
 {
     if (!trie) return -1;
     
-    _gbt_destroy_recursive_nibbles(trie->nibbles, trie->children, trie->deallocator);
+    _gnt_destroy_recursive_nibbles(trie->nibbles, trie->children, trie->deallocator);
     free(trie);
     
     return 0;
 }
 
-gbt_status_t gbt_insert(gbt_trie_t* trie, gbt_key_t key, gbt_data_t data)
+gnt_status_t gnt_insert(gnt_trie_t* trie, gnt_key_t key, gnt_data_t data)
 {
     if (!trie) return -1;
     
-    gbt_nibble_t** nibbles = trie->nibbles;
-    gbt_node_t** nodes;
-    gbt_node_t* node;
-    gbt_byte_t byte;
-    gbt_index_t index = 0;
+    gnt_nibble_t** nibbles = trie->nibbles;
+    gnt_node_t** nodes;
+    gnt_node_t* node;
+    gnt_byte_t byte;
+    gnt_index_t index = 0;
     uint8_t* children = &(trie->children);
     
     while (0 == trie->accessor(&byte, key, index++))
     {
-        gbt_byte_t high_nibble = GBT_HIGH_NIBBLE(byte);
-        gbt_byte_t low_nibble = GBT_LOW_NIBBLE(byte);
+        gnt_byte_t high_nibble = GNT_HIGH_NIBBLE(byte);
+        gnt_byte_t low_nibble = GNT_LOW_NIBBLE(byte);
         
         if (!nibbles[high_nibble])
         {
-            nibbles[high_nibble] = calloc(1, sizeof(gbt_nibble_t));
+            nibbles[high_nibble] = calloc(1, sizeof(gnt_nibble_t));
             (*children)++;
         }
 
@@ -134,7 +134,7 @@ gbt_status_t gbt_insert(gbt_trie_t* trie, gbt_key_t key, gbt_data_t data)
         
         if (!nodes[low_nibble])
         {
-            nodes[low_nibble] = calloc(1, sizeof(gbt_node_t));
+            nodes[low_nibble] = calloc(1, sizeof(gnt_node_t));
             (*children)++;
         }
 
@@ -154,20 +154,20 @@ gbt_status_t gbt_insert(gbt_trie_t* trie, gbt_key_t key, gbt_data_t data)
     return 0;
 }
 
-gbt_data_t gbt_search(gbt_trie_t* trie, gbt_key_t key)
+gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
     
-    gbt_nibble_t** nibbles = trie->nibbles;
-    gbt_node_t** nodes;
-    gbt_node_t* node;
-    gbt_byte_t byte;
-    gbt_index_t index = 0;
+    gnt_nibble_t** nibbles = trie->nibbles;
+    gnt_node_t** nodes;
+    gnt_node_t* node;
+    gnt_byte_t byte;
+    gnt_index_t index = 0;
     
     while (0 == trie->accessor(&byte, key, index++))
     {
-        gbt_byte_t high_nibble = GBT_HIGH_NIBBLE(byte);
-        gbt_byte_t low_nibble = GBT_LOW_NIBBLE(byte);
+        gnt_byte_t high_nibble = GNT_HIGH_NIBBLE(byte);
+        gnt_byte_t low_nibble = GNT_LOW_NIBBLE(byte);
         
         if (!nibbles[high_nibble])
         {
@@ -188,18 +188,18 @@ gbt_data_t gbt_search(gbt_trie_t* trie, gbt_key_t key)
     return node->data;
 }
 
-gbt_status_t gbt_delete(gbt_trie_t* trie, gbt_key_t key)
+gnt_status_t gnt_delete(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
     
     uint8_t child_byte;
     
-    if (CONTINUE == _gbt_delete_recursive(&child_byte, trie->nibbles, key, 0, trie->accessor, trie->deallocator))
+    if (CONTINUE == _gnt_delete_recursive(&child_byte, trie->nibbles, key, 0, trie->accessor, trie->deallocator))
     {
         if (trie->children)
         {
-            free(trie->nibbles[GBT_HIGH_NIBBLE(child_byte)]);
-            trie->nibbles[GBT_HIGH_NIBBLE(child_byte)] = NULL;
+            free(trie->nibbles[GNT_HIGH_NIBBLE(child_byte)]);
+            trie->nibbles[GNT_HIGH_NIBBLE(child_byte)] = NULL;
             trie->children--;
         }
     }
@@ -207,7 +207,7 @@ gbt_status_t gbt_delete(gbt_trie_t* trie, gbt_key_t key)
     return 0;
 }
 
-gbt_status_t gbt_accessor_string(gbt_byte_t* byte, gbt_key_t key, gbt_index_t index)
+gnt_status_t gnt_accessor_string(gnt_byte_t* byte, gnt_key_t key, gnt_index_t index)
 {
     char* str = (char*) key;
     
@@ -220,10 +220,10 @@ gbt_status_t gbt_accessor_string(gbt_byte_t* byte, gbt_key_t key, gbt_index_t in
     return 0;
 }
 
-static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_index_t index)
+static gnt_status_t _gnt_accessor_default(gnt_byte_t* byte, gnt_key_t key, gnt_index_t index)
 {
     uint8_t digits = 0;
-    gbt_key_t temp = key;
+    gnt_key_t temp = key;
 
     do
     {
@@ -245,13 +245,13 @@ static gbt_status_t _gbt_accessor_default(gbt_byte_t* byte, gbt_key_t key, gbt_i
     return 0;
 }
 
-static void _gbt_destroy_recursive_nibbles(gbt_nibble_t** nibbles, uint8_t children, gbt_deallocator_t deallocator)
+static void _gnt_destroy_recursive_nibbles(gnt_nibble_t** nibbles, uint8_t children, gnt_deallocator_t deallocator)
 {
     for (uint8_t i = 0; children && i < 16; i++)
     {
         if (nibbles[i])
         {
-            _gbt_destroy_recursive_nodes(nibbles[i]->nodes, nibbles[i]->children, deallocator);
+            _gnt_destroy_recursive_nodes(nibbles[i]->nodes, nibbles[i]->children, deallocator);
             free(nibbles[i]);
             nibbles[i] = 0;
             children--;
@@ -259,13 +259,13 @@ static void _gbt_destroy_recursive_nibbles(gbt_nibble_t** nibbles, uint8_t child
     }
 }
 
-static void _gbt_destroy_recursive_nodes(gbt_node_t** nodes, uint8_t children, gbt_deallocator_t deallocator)
+static void _gnt_destroy_recursive_nodes(gnt_node_t** nodes, uint8_t children, gnt_deallocator_t deallocator)
 {
     for (uint8_t i = 0; children && i < 16; i++)
     {
         if (nodes[i])
         {
-            _gbt_destroy_recursive_nibbles(nodes[i]->nibbles, nodes[i]->children, deallocator);
+            _gnt_destroy_recursive_nibbles(nodes[i]->nibbles, nodes[i]->children, deallocator);
             
             if (deallocator)
             {
@@ -279,21 +279,21 @@ static void _gbt_destroy_recursive_nodes(gbt_node_t** nodes, uint8_t children, g
     }
 }
 
-static gbt_status_t _gbt_delete_recursive(gbt_byte_t* byte, gbt_nibble_t** nibbles, gbt_key_t key, gbt_index_t index, gbt_accessor_t accessor, gbt_deallocator_t deallocator)
+static gnt_status_t _gnt_delete_recursive(gnt_byte_t* byte, gnt_nibble_t** nibbles, gnt_key_t key, gnt_index_t index, gnt_accessor_t accessor, gnt_deallocator_t deallocator)
 {
     if (0 != accessor(byte, key, index))
     {
         return END;
     }
     
-    gbt_byte_t high_nibble = GBT_HIGH_NIBBLE(*byte);
-    gbt_byte_t low_nibble = GBT_LOW_NIBBLE(*byte);
+    gnt_byte_t high_nibble = GNT_HIGH_NIBBLE(*byte);
+    gnt_byte_t low_nibble = GNT_LOW_NIBBLE(*byte);
     
-    gbt_nibble_t* nibble = nibbles[high_nibble];
-    gbt_node_t* node = nibble->nodes[low_nibble];
+    gnt_nibble_t* nibble = nibbles[high_nibble];
+    gnt_node_t* node = nibble->nodes[low_nibble];
     
     uint8_t child_byte = 0;
-    gbt_status_t status = _gbt_delete_recursive(&child_byte, node->nibbles, key, index + 1, accessor, deallocator);
+    gnt_status_t status = _gnt_delete_recursive(&child_byte, node->nibbles, key, index + 1, accessor, deallocator);
 
     if (STOP == status)
     {
@@ -316,8 +316,8 @@ static gbt_status_t _gbt_delete_recursive(gbt_byte_t* byte, gbt_nibble_t** nibbl
         }
     }
     
-    free(node->nibbles[GBT_HIGH_NIBBLE(child_byte)]);
-    node->nibbles[GBT_HIGH_NIBBLE(child_byte)] = NULL;
+    free(node->nibbles[GNT_HIGH_NIBBLE(child_byte)]);
+    node->nibbles[GNT_HIGH_NIBBLE(child_byte)] = NULL;
     
     if (node->children)
     {
