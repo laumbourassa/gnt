@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Generic Nibble Trie (GNT)** library is designed for efficient storage and retrieval of data using nibble tries, also known as prefix trees. This library is type-agnostic, allowing users to insert and search for data of various types using flexible key representations.
+The **Generic Nibble Trie (GNT)** library is designed for efficient storage and retrieval of data using nibble tries. This library is type-agnostic, allowing users to insert and search for data of various types using flexible key representations.
 
 ## Features
 - **Generic Key-Value Storage:** Supports different data types (integers, floats, and pointers) for both keys and values using a unified `gnt_key_t` and `gnt_data_t` type.
