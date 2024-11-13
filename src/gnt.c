@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <threads.h>
 #include "gnt.h"
 
 #define GNT_HIGH_NIBBLE(byte)           (byte >> 4)
@@ -52,6 +53,7 @@ typedef struct gnt_node // Represents the last 4 bits of a byte
 
 typedef struct gnt_trie
 {
+    mtx_t mutex;
     uint8_t children;
     gnt_nibble_t* nibbles[16];
     gnt_accessor_t accessor;
@@ -90,6 +92,12 @@ gnt_trie_t* gnt_create(gnt_cfg_t* cfg)
     
     if (trie)
     {
+        if (thrd_success != mtx_init(&trie->mutex, mtx_plain))
+        {
+            free(trie);
+            return NULL;
+        }
+
         trie->accessor = accessor;
         trie->deallocator = deallocator;
     }
@@ -102,6 +110,8 @@ gnt_status_t gnt_destroy(gnt_trie_t* trie)
     if (!trie) return -1;
     
     _gnt_destroy_recursive_nibbles(trie->nibbles, trie->children, trie->deallocator);
+    
+    mtx_destroy(&trie->mutex);
     free(trie);
     
     return 0;
@@ -110,6 +120,7 @@ gnt_status_t gnt_destroy(gnt_trie_t* trie)
 gnt_status_t gnt_insert(gnt_trie_t* trie, gnt_key_t key, gnt_data_t data)
 {
     if (!trie) return -1;
+    mtx_lock(&trie->mutex);
     
     gnt_nibble_t** nibbles = trie->nibbles;
     gnt_node_t** nodes;
@@ -150,13 +161,15 @@ gnt_status_t gnt_insert(gnt_trie_t* trie, gnt_key_t key, gnt_data_t data)
     
     node->data = data;
     node->occupied = true;
-    
+
+    mtx_unlock(&trie->mutex);
     return 0;
 }
 
 gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
+    mtx_lock(&trie->mutex);
     
     gnt_nibble_t** nibbles = trie->nibbles;
     gnt_node_t** nodes;
@@ -184,13 +197,17 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
         nibbles = nodes[low_nibble]->nibbles;
         node = nodes[low_nibble];
     }
-    
-    return node->data;
+
+    gnt_data_t data = node->data;
+
+    mtx_unlock(&trie->mutex);
+    return data;
 }
 
 gnt_status_t gnt_delete(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
+    mtx_lock(&trie->mutex);
     
     uint8_t child_byte;
     
@@ -204,6 +221,7 @@ gnt_status_t gnt_delete(gnt_trie_t* trie, gnt_key_t key)
         }
     }
     
+    mtx_unlock(&trie->mutex);
     return 0;
 }
 
