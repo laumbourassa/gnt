@@ -184,6 +184,7 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
         
         if (!nibbles[high_nibble])
         {
+            mtx_unlock(&trie->mutex);
             return 0;
         }
 
@@ -191,6 +192,7 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
         
         if (!nodes[low_nibble])
         {
+            mtx_unlock(&trie->mutex);
             return 0;
         }
 
