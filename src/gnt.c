@@ -34,8 +34,10 @@
 #define GNT_LOW_NIBBLE(byte)            (byte & 0x0F)
 #define GNT_SELECT_KEY_BYTE(key, index) (key >> (8 * index))
 
-#define GNT_MUTEX_LOCK(gnt)     mtx_lock(&gnt->mutex)
-#define GNT_MUTEX_UNLOCK(gnt)   mtx_unlock(&gnt->mutex)
+#define GNT_MUTEX_CREATE(gnt)   (thrd_success == mtx_init(&gnt->mutex, mtx_plain))
+#define GLL_MUTEX_DESTROY(gnt)  (mtx_destroy(&gnt->mutex))
+#define GNT_MUTEX_LOCK(gnt)     (mtx_lock(&gnt->mutex))
+#define GNT_MUTEX_UNLOCK(gnt)   (mtx_unlock(&gnt->mutex))
 
 typedef struct gnt_node gnt_node_t;
 
@@ -95,7 +97,7 @@ gnt_trie_t* gnt_create(gnt_cfg_t* cfg)
     
     if (trie)
     {
-        if (thrd_success != mtx_init(&trie->mutex, mtx_plain))
+        if (!GNT_MUTEX_CREATE(trie))
         {
             free(trie);
             return NULL;
@@ -114,7 +116,7 @@ gnt_status_t gnt_destroy(gnt_trie_t* trie)
     
     _gnt_destroy_recursive_nibbles(trie->nibbles, trie->children, trie->deallocator);
     
-    mtx_destroy(&trie->mutex);
+    GLL_MUTEX_DESTROY(trie);
     free(trie);
     
     return 0;
