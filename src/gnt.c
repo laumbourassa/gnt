@@ -34,6 +34,9 @@
 #define GNT_LOW_NIBBLE(byte)            (byte & 0x0F)
 #define GNT_SELECT_KEY_BYTE(key, index) (key >> (8 * index))
 
+#define GNT_MUTEX_LOCK(gnt)     mtx_lock(&gnt->mutex)
+#define GNT_MUTEX_UNLOCK(gnt)   mtx_unlock(&gnt->mutex)
+
 typedef struct gnt_node gnt_node_t;
 
 typedef struct gnt_nibble gnt_nibble_t;
@@ -120,7 +123,7 @@ gnt_status_t gnt_destroy(gnt_trie_t* trie)
 gnt_status_t gnt_insert(gnt_trie_t* trie, gnt_key_t key, gnt_data_t data)
 {
     if (!trie) return -1;
-    mtx_lock(&trie->mutex);
+    GNT_MUTEX_LOCK(trie);
     
     gnt_nibble_t** nibbles = trie->nibbles;
     gnt_node_t** nodes;
@@ -162,14 +165,14 @@ gnt_status_t gnt_insert(gnt_trie_t* trie, gnt_key_t key, gnt_data_t data)
     node->data = data;
     node->occupied = true;
 
-    mtx_unlock(&trie->mutex);
+    GNT_MUTEX_UNLOCK(trie);
     return 0;
 }
 
 gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
-    mtx_lock(&trie->mutex);
+    GNT_MUTEX_LOCK(trie);
     
     gnt_nibble_t** nibbles = trie->nibbles;
     gnt_node_t** nodes;
@@ -184,7 +187,7 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
         
         if (!nibbles[high_nibble])
         {
-            mtx_unlock(&trie->mutex);
+            GNT_MUTEX_UNLOCK(trie);
             return 0;
         }
 
@@ -192,7 +195,7 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
         
         if (!nodes[low_nibble])
         {
-            mtx_unlock(&trie->mutex);
+            GNT_MUTEX_UNLOCK(trie);
             return 0;
         }
 
@@ -202,14 +205,14 @@ gnt_data_t gnt_search(gnt_trie_t* trie, gnt_key_t key)
 
     gnt_data_t data = node->data;
 
-    mtx_unlock(&trie->mutex);
+    GNT_MUTEX_UNLOCK(trie);
     return data;
 }
 
 gnt_status_t gnt_delete(gnt_trie_t* trie, gnt_key_t key)
 {
     if (!trie) return -1;
-    mtx_lock(&trie->mutex);
+    GNT_MUTEX_LOCK(trie);
     
     uint8_t child_byte;
     
@@ -223,7 +226,7 @@ gnt_status_t gnt_delete(gnt_trie_t* trie, gnt_key_t key)
         }
     }
     
-    mtx_unlock(&trie->mutex);
+    GNT_MUTEX_UNLOCK(trie);
     return 0;
 }
 
